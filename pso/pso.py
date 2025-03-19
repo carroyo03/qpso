@@ -34,6 +34,7 @@ class ParticleSwarmOptimization():
         self.w, self.c1, self.c2 = w, c1, c2
 
         self.vel_min, self.vel_max = vel_min, vel_max
+        self.cost_history = []
 
     def get_gbest(self):
         """
@@ -97,6 +98,7 @@ class ParticleSwarmOptimization():
             print("-" * 50)
             print(f"Iteration {it + 1}:")
             self.move_particles()
+            self.cost_history.append(self.objective_function(self.gbest))
             print(f"-> gBest value: {self.gbest}")
             print(f"-> Objective function value: {self.objective_function(self.gbest)}")
             print()
