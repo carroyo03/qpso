@@ -1,5 +1,5 @@
 import numpy as np
-from particle import Particle
+from pso.particle import Particle
 
 class ParticleSwarmOptimization():
     """
@@ -17,10 +17,12 @@ class ParticleSwarmOptimization():
         c2 (float): The social weight.
     """
     def __init__(self, number_of_particles: int, dim: int,
-                 pos_min: int, pos_max: int, vel_min: int, vel_max: int,
+                 bounds: tuple, vel_min: int, vel_max: int,
                  w: float, c1: float, c2: float):
+        pos_min,pos_max = bounds
         if pos_min >= pos_max:
             raise ValueError("The minimum position cannot be greater or equal than the maximum")
+        self.dim, self.pos_min, self.pos_max = dim, pos_min, pos_max
         self.number_of_particles = number_of_particles
         positions = np.random.uniform(low=pos_min, high=pos_max, size=(number_of_particles, dim))
         velocities = np.random.uniform(low=vel_min, high=vel_max, size=(number_of_particles, dim))
@@ -30,7 +32,7 @@ class ParticleSwarmOptimization():
                       range(number_of_particles)}
         self.gbest = self.get_gbest()
         self.w, self.c1, self.c2 = w, c1, c2
-        self.dim, self.pos_min, self.pos_max = dim, pos_min, pos_max
+
         self.vel_min, self.vel_max = vel_min, vel_max
 
     def get_gbest(self):
@@ -55,15 +57,18 @@ class ParticleSwarmOptimization():
 
     def objective_function(self, position):
         """
-        The objective function to be optimized.
+        The objective function to be optimized. In this case, the Ackley function.
         Args:
             position (np.ndarray): The position of the particle.
         Returns:
+            float: The value of the objective function.
         """
-        result = 0
-        for coord in position:
-            result += coord ** 2  # x² + y² + z² + ...
-        return result
+
+
+
+        return -20 * np.exp(-0.2 * np.sqrt((1/self.dim * np.sum(position**2))))-np.exp((1/self.dim * np.sum(np.cos(2 *
+  np.pi * position)))) + np.e + 20
+
 
     def move_particles(self):
         for particle_name in self.particles.keys():
@@ -108,4 +113,4 @@ class ParticleSwarmOptimization():
             # Update previous gbest for the next iteration
             previous_gbest = self.gbest.copy()
 
-        return self.gbest
+        return self.objective_function(self.gbest),self.gbest
