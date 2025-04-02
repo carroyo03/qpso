@@ -61,6 +61,41 @@ def pyswarms_pso_optimize(function: str, bounds, n_particles, iters, options: di
     return cost, pos, cost_history
 
 def run_optimization(params_and_function: tuple, rep_num=0):
+    """Run the optimization for a given set of parameters and function.
+    Args:
+        params_and_function (tuple): Tuple containing parameters and function name.
+        rep_num (int): Repetition number for the optimization.
+    Returns:
+        list: List containing the results of the optimization.
+    """
+    # Disable PySwarms logging completely
+    import logging
+    logging.getLogger("pyswarms").setLevel(logging.CRITICAL)
+    
+    # Also disable PySwarms standard output during optimization
+    import sys
+    import os
+    from contextlib import contextmanager
+    
+    @contextmanager
+    def suppress_stdout_stderr():
+        # Redirect stdout and stderr to /dev/null
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        old_stdout = os.dup(1)
+        old_stderr = os.dup(2)
+        os.dup2(devnull, 1)
+        os.dup2(devnull, 2)
+        os.close(devnull)
+        
+        try:
+            yield
+        finally:
+            # Restore stdout and stderr
+            os.dup2(old_stdout, 1)
+            os.dup2(old_stderr, 2)
+            os.close(old_stdout)
+            os.close(old_stderr)
+    
     params, function = params_and_function
     n_particles, iters, w, c1, c2, dim = params
     
@@ -69,32 +104,30 @@ def run_optimization(params_and_function: tuple, rep_num=0):
         bounds = ([-5.12] * dim, [5.12] * dim)
     else:
         bounds = ([-5] * dim, [5] * dim)
-    desc = f"{function[:4]} p{n_particles}i{iters}w{w}"
-    with tqdm(total=2, desc=desc, leave=False) as pbar: 
-        # My PSO
-        time_start1 = time.time()
-        my_result = my_pso_optimize(
-            function=function, bounds=bounds, n_particles=n_particles, 
-            iters=iters, dim=dim, w=w, c1=c1, c2=c2
-        )
-        my_pso_time = time.time() - time_start1
-        pbar.update(1)
     
-        # PySwarms
-        time_start2 = time.time()
+    # My PSO (without internal progress bar)
+    time_start1 = time.time()
+    my_result = my_pso_optimize(
+        function=function, bounds=bounds, n_particles=n_particles, 
+        iters=iters, dim=dim, w=w, c1=c1, c2=c2
+    )
+    my_pso_time = time.time() - time_start1
+    
+    # PySwarms
+    time_start2 = time.time()
+    with suppress_stdout_stderr():
         pyswarms_result = pyswarms_pso_optimize(
             function, bounds=bounds, n_particles=n_particles, 
             iters=iters, options={'w': w, 'c1': c1, 'c2': c2}
         )
-        pyswarms_pso_time = time.time() - time_start2
-        pbar.update(1)
+    pyswarms_pso_time = time.time() - time_start2
     
     if pyswarms_result[0] is None:
         # Error handling for PySwarms
         print(f"Error: PySwarms optimization failed for function {function} with params {params}")
         return None
-    
-    # Create result dictionaries
+    ""
+    # Create result dictionaries without printing anything
     my_result_dict = {
         'method': 'my_pso',
         'function': function,
@@ -127,39 +160,6 @@ def run_optimization(params_and_function: tuple, rep_num=0):
         'repetition': rep_num
     }
     
-    # Print comparison between My PSO' and PySwarms' results
-    print("-" * 50)
-    print(f"Function: {function}")
-    print(f"Parameters: n_particles={n_particles}, iters={iters}, w={w}, c1={c1}, c2={c2}, dim={dim}")
-    print("-" * 50)
-    print()
-    print("* My PSO:")
-    for key in my_result_dict.keys():
-        if key not in ['function', 'position', 'cost_history', 'repetition']:
-            print(f"\t-> {key}: {my_result_dict[key]}")
-    print()
-    print("* PySwarms PSO:")
-    for key in pyswarms_result_dict.keys():
-        if key not in ['function', 'position', 'cost_history', 'repetition']:
-            print(f"\t-> {key}: {pyswarms_result_dict[key]}")
-    print()
-    
-    # Compare results
-    if pyswarms_result[0] < my_result[0]:
-        print(f"PySwarms PSO is {my_result[0] - pyswarms_result[0]} units cheaper than My PSO.")
-    elif pyswarms_result[0] > my_result[0]:
-        print(f"My PSO is {pyswarms_result[0] - my_result[0]} units cheaper than PySwarms PSO.")
-    else:
-        print("Both PSOs have the same cost.")
-
-    if pyswarms_pso_time < my_pso_time:
-        print(f"PySwarms PSO is faster than My PSO by {my_pso_time - pyswarms_pso_time} seconds.")
-    elif pyswarms_pso_time > my_pso_time:
-        print(f"My PSO is faster than PySwarms PSO by {pyswarms_pso_time - my_pso_time} seconds.")
-    else:
-        print("Both PSOs have the same execution time.")
-    print("-" * 50)
-    print()
+    # Remove all print statements
     
     return [my_result_dict, pyswarms_result_dict]
-

@@ -1,9 +1,10 @@
-from fun.test_function import my_pso_optimize, pyswarms_pso_optimize, run_optimization
+from fun.test_function import my_pso_optimize, pyswarms_pso_optimize, run_optimization #type: ignore
 import pandas as pd #type: ignore
 import itertools
 import multiprocessing as mp
 from functools import partial
 from tqdm import tqdm  #type: ignore
+import os  # Add import for directory creation
 
 if __name__ == '__main__':  
     n_particles_list = [10, 20, 50]
@@ -18,33 +19,45 @@ if __name__ == '__main__':
     functions = ['ackley', 'rosenbrock', 'rastrigin']
     
     # Create all combinations of parameters and functions
-    all_combinations = [(params, func) for params in param_combinations for func in functions]
-    num_repetitions = 5
-    results = []
+    all_combinations:list = [(params, func) for params in param_combinations for func in functions]
+    num_repetitions:int = 5
+    results:list = []
     
     # Set the processing pool
     num_cores = mp.cpu_count() - 1  # Leave one core free for system tasks
     print(f"Running on {num_cores} cores")
     
-    # Calculate total iterations for the progress bar
-    total_iterations = len(all_combinations) * num_repetitions
-    
-    # Create a master progress bar for all repetitions
-    with tqdm(total=total_iterations, desc="Total Progress") as pbar:
+    # Create a single, simple progress bar
+    total_tasks = len(all_combinations) * num_repetitions
+    with tqdm(
+        total=total_tasks, 
+        desc="Optimization",
+        bar_format='{desc}: {percentage:3.0f}%|{bar:30}| {n_fmt}/{total_fmt}',
+        dynamic_ncols=True,
+        miniters=max(1, total_tasks // 100)  # Update the bar less frequently
+    ) as progress_bar:
         # Execute the optimizations in parallel
         for rep in range(num_repetitions):
-            # Create a partial function to pass the repetition number
             run_opt_with_rep = partial(run_optimization, rep_num=rep)
             
-            # Execute the optimizations in parallel
-            with mp.Pool(processes=num_cores) as pool:
-                # Use imap instead of map to process results as they come
+            # Properly initialize and clean up the pool
+            pool = mp.Pool(processes=num_cores)
+            try:
+                # Process results and update progress bar
                 for result in pool.imap_unordered(run_opt_with_rep, all_combinations):
                     if result is not None:
                         results.extend(result)
-                    pbar.update(1)  # Update progress bar for each completed task
+                    progress_bar.update(1)
+            finally:
+                # Ensure proper cleanup
+                pool.close()
+                pool.join()
+    
+    # Create the analysis directory if it doesn't exist
+    analysis_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'analysis')
+    os.makedirs(analysis_dir, exist_ok=True)
     
     # Save final results in a CSV file
     df = pd.DataFrame(results)
-    df.to_csv('../analysis/results.csv', index=False)
-    print("Results saved to ../analysis/results.csv")
+    df.to_csv(os.path.join(analysis_dir, 'results.csv'), index=False)
+    print(f"Results saved to {os.path.join(analysis_dir, 'results.csv')}")

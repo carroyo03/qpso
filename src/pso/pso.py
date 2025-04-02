@@ -11,8 +11,8 @@ class ParticleSwarmOptimization:
             number_of_particles (int): Number of particles in the swarm.
             dim (int): Number of dimensions for the optimization problem.
             bounds (tuple): Tuple containing the minimum and maximum bounds for the position.
-            vel_min (float): Minimum velocity for the particles.
-            vel_max (float): Maximum velocity for the particles.
+            vel_min (float): Minimum velocity for particles.
+            vel_max (float): Maximum velocity for particles.
             w (float): Inertia weight.
             c1 (float): Cognitive coefficient.
             c2 (float): Social coefficient.
@@ -47,7 +47,7 @@ class ParticleSwarmOptimization:
         self.gbest_cost = self.pbest_costs[gbest_idx]
 
         # Initialize cost history
-        self.cost_history = []
+        self.cost_history:list = []
 
     def objective_function(self, position:np.ndarray) -> np.ndarray:
         """Evaluate the objective function.
@@ -129,20 +129,17 @@ class ParticleSwarmOptimization:
         # Check if gbest is initialized
         if self.gbest is None:
             raise ValueError("self.gbest is not initialized")
-
+    
         # Initialize the inertia weight schedule
         # Linearly decrease the inertia weight from w_init to w_min
         w_min = 0.4
         w_values = np.linspace(self.w_init, w_min, num_iterations)
-
         # Initialize cost history
         self.cost_history = []
-        
-        # Add progress bar for iterations
-        for it in tqdm(range(num_iterations), desc="PSO Progress", leave=False):
+        for it in range(num_iterations):
             # Update the inertia weight and move particles
             self.move_particles(w_values[it])
             self.cost_history.append(self.gbest_cost)
-
+        
         # Final evaluation
         return self.gbest_cost, self.gbest, self.cost_history
