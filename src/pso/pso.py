@@ -3,13 +3,14 @@ from fun.functions import objective #type: ignore
 import time
 import pyswarms as ps #type: ignore
 from pyswarms.utils.functions import single_obj as fx #type: ignore
+from pso.particle import Particle  # type: ignore
 
 
 class ParticleSwarmOptimization:
     def __init__(self, number_of_particles: int, dim: int,
-                 bounds: tuple, vel_min: float, vel_max: float,
-                 w: float, c1: float, c2: float, function: str):
-        """ParticleSwarmOptimization (PSO) algorithm implementation.
+    bounds: tuple, vel_min: float, vel_max: float,
+    w: float, c1: float, c2: float, function: str):
+        """Particle Swarm Optimization (PSO) algorithm implementation.
         Args:
             number_of_particles (int): Number of particles in the swarm.
             dim (int): Number of dimensions for the optimization problem.
@@ -36,52 +37,41 @@ class ParticleSwarmOptimization:
         self.c1, self.c2 = c1, c2
         self.function = function
 
-        # Initialize particles' positions and velocities
-        self.positions = np.random.uniform(low=pos_min, high=pos_max, size=(number_of_particles, dim))
-        self.velocities = np.random.uniform(low=-0.1 * (pos_max - pos_min),
-                                            high=0.1 * (pos_max - pos_min),
-                                            size=(number_of_particles, dim))
-
-        # Initialize personal best (pbest) and global best (gbest)
-        self.pbest = self.positions.copy()
-        self.pbest_costs = objective(self.positions)
-        gbest_idx = np.argmin(self.pbest_costs)
-        self.gbest = self.pbest[gbest_idx].copy()
-        self.gbest_cost = self.pbest_costs[gbest_idx]
-
+        # Initialize particles using the Particle class
+        self.particles = [
+            Particle(dim, pos_min, pos_max, vel_min, vel_max) 
+            for _ in range(number_of_particles)
+        ]
+        
+        # Evaluate all particles initially
+        for particle in self.particles:
+            particle.evaluate(lambda x: objective(x.reshape(1, -1))[0])
+        
+        # Find global best
+        gbest_idx = np.argmin([p.pbest_cost for p in self.particles])
+        self.gbest = self.particles[gbest_idx].pbest_position.copy()
+        self.gbest_cost = self.particles[gbest_idx].pbest_cost
+        
         # Initialize cost history
-        self.cost_history:list = []
+        self.cost_history:list[float] = []
 
     def move_particles(self, w: float):
         """Update the particles' positions and velocities.
         Args:
             w (float): Inertia weight.
         """
-        # Generate random numbers for cognitive and social components
-        r1 = np.random.rand(self.number_of_particles)
-        r2 = np.random.rand(self.number_of_particles)
-
-        # Update velocities
-        cognitive = self.c1 * r1[:, np.newaxis] * (self.pbest - self.positions)
-        social = self.c2 * r2[:, np.newaxis] * (self.gbest - self.positions)
-        self.velocities = w * self.velocities + cognitive + social
-        self.velocities = np.clip(self.velocities, self.vel_min, self.vel_max)
-
-        # Update positions
-        self.positions += self.velocities
-        self.positions = np.clip(self.positions, self.pos_min, self.pos_max)
-
-        # Update pbest and gbest
-        costs = objective(self.positions)
-        improved = costs < self.pbest_costs
-        self.pbest[improved] = self.positions[improved].copy()
-        self.pbest_costs[improved] = costs[improved]
-
-        # Update gbest if a better pbest is found
-        gbest_idx = np.argmin(self.pbest_costs)
-        if self.pbest_costs[gbest_idx] < self.gbest_cost:
-            self.gbest = self.pbest[gbest_idx].copy()
-            self.gbest_cost = self.pbest_costs[gbest_idx]
+        for particle in self.particles:
+            # Update velocity and position
+            particle.update_velocity(w, self.c1, self.c2, self.gbest)
+            particle.update_position()
+            
+            # Evaluate new position
+            cost = particle.evaluate(lambda x: objective(x.reshape(1, -1))[0])
+            
+            # Update global best if needed
+            if cost < self.gbest_cost:
+                self.gbest = particle.position.copy()
+                self.gbest_cost = cost
 
     def optimize(self, num_iterations: int) -> tuple:
         """Optimize the objective function using PSO.
@@ -90,16 +80,14 @@ class ParticleSwarmOptimization:
         Returns:
             tuple: Best cost, best position, and cost history.
         """
-        # Check if gbest is initialized
-        if self.gbest is None:
-            raise ValueError("self.gbest is not initialized")
-    
         # Initialize the inertia weight schedule
         # Linearly decrease the inertia weight from w_init to w_min
         w_min = 0.4
         w_values = np.linspace(self.w_init, w_min, num_iterations)
+        
         # Initialize cost history
         self.cost_history = []
+        
         for it in range(num_iterations):
             # Update the inertia weight and move particles
             self.move_particles(w_values[it])

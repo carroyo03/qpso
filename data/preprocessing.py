@@ -1,5 +1,5 @@
 import pandas as pd #type: ignore
-import torch
+import torch #type: ignore
 from sklearn.model_selection import train_test_split #type: ignore
 from sklearn.preprocessing import StandardScaler #type: ignore
 from ucimlrepo import fetch_ucirepo #type: ignore
