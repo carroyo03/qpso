@@ -1,4 +1,4 @@
-from fun.test_function import my_pso_optimize, pyswarms_pso_optimize, run_optimization #type: ignore
+from pso.pso import  run_optimization #type: ignore
 import pandas as pd #type: ignore
 import itertools
 import multiprocessing as mp
