@@ -45,7 +45,7 @@ class ParticleSwarmOptimization:
         
         # Evaluate all particles initially
         for particle in self.particles:
-            particle.evaluate(lambda x: objective(x.reshape(1, -1))[0])
+            particle.evaluate(lambda x: objective(position = x.reshape(1, -1), function = self.function)[0])
         
         # Find global best
         gbest_idx = np.argmin([p.pbest_cost for p in self.particles])
@@ -66,7 +66,7 @@ class ParticleSwarmOptimization:
             particle.update_position()
             
             # Evaluate new position
-            cost = particle.evaluate(lambda x: objective(x.reshape(1, -1))[0])
+            cost = particle.evaluate(lambda x: objective(position=x.reshape(1, -1), function=self.function)[0])
             
             # Update global best if needed
             if cost < self.gbest_cost:
@@ -187,8 +187,8 @@ def run_optimization(params_and_function: tuple, rep_num=0):
             os.close(old_stdout)
             os.close(old_stderr)
     
-    params, function = params_and_function
-    n_particles, iters, w, c1, c2, dim = params
+    # Unpack parameters and function
+    n_particles, iters, w, c1, c2, dim, function = params_and_function
     
     # Set bounds based on the function
     if function == "rastrigin":
@@ -214,6 +214,7 @@ def run_optimization(params_and_function: tuple, rep_num=0):
     pyswarms_pso_time = time.time() - time_start2
     
     if pyswarms_result[0] is None:
+        params = {'Number of particles' : n_particles, 'Iterations' : iters, 'w': w, 'c1': c1, 'c2': c2, 'Dimensions': dim, 'Function': function}
         # Error handling for PySwarms
         print(f"Error: PySwarms optimization failed for function {function} with params {params}")
         return None

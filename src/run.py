@@ -15,11 +15,11 @@ if __name__ == '__main__':
     dim_list = [2, 5, 10]
     
     # Generate all combinations of parameters
-    param_combinations = list(itertools.product(n_particles_list, iters_list, w_list, c1_list, c2_list, dim_list))
     functions = ['ackley', 'rosenbrock', 'rastrigin']
+    all_combinations = list(itertools.product(n_particles_list, iters_list, w_list, c1_list, c2_list, dim_list, functions))
+
     
     # Create all combinations of parameters and functions
-    all_combinations:list = [(params, func) for params in param_combinations for func in functions]
     num_repetitions:int = 5
     results:list = []
     
