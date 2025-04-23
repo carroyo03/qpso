@@ -1,5 +1,12 @@
 import numpy as np
 
+try:
+    import cpp.pso_core as pso_core  # type: ignore
+    HAS_CPP_EXTENSION = True
+except ImportError:
+    HAS_CPP_EXTENSION = False
+    print("C++ extension not found. Using Python implementation instead.")
+
 class Particle:
     """A simple class to represent a particle in the Particle Swarm Optimization (PSO) algorithm.
     
@@ -72,7 +79,7 @@ class Particle:
         # Clip position to bounds
         self.position = np.clip(self.position, self.pos_min, self.pos_max)
     
-    def evaluate(self, objective_function):
+    def evaluate(self, objective_function, function_name: str = ""):
         """Evaluate the particle's position and update personal best if improved.
         
         Args:
@@ -81,8 +88,15 @@ class Particle:
         Returns:
             float: The cost at the current position.
         """
+        if HAS_CPP_EXTENSION and function_name != "":
+            
+            cost_array = pso_core.evaluate_swarm(self.position, function_name)
+            cost = float(cost_array[0])
+        
+        else:
+            # If not C++, Python implementation is used
         # Evaluate current position
-        cost = objective_function(self.position)
+            cost = objective_function(self.position)
         
         # Update personal best if current position is better
         if cost < self.pbest_cost:

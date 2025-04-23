@@ -45,7 +45,13 @@ class ParticleSwarmOptimization:
         
         # Evaluate all particles initially
         for particle in self.particles:
-            particle.evaluate(lambda x: objective(position = x.reshape(1, -1), function = self.function)[0])
+            particle.evaluate(
+                lambda x: objective(
+                    position = x.reshape(1, -1),
+                    function = self.function)[0],
+                
+                function_name=self.function
+            )
         
         # Find global best
         gbest_idx = np.argmin([p.pbest_cost for p in self.particles])
@@ -66,7 +72,13 @@ class ParticleSwarmOptimization:
             particle.update_position()
             
             # Evaluate new position
-            cost = particle.evaluate(lambda x: objective(position=x.reshape(1, -1), function=self.function)[0])
+            cost = particle.evaluate(
+                lambda x: objective(
+                    position=x.reshape(1, -1), 
+                    function=self.function
+                    )[0],
+                function_name=self.function
+            )
             
             # Update global best if needed
             if cost < self.gbest_cost:
