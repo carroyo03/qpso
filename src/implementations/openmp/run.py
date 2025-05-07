@@ -1,5 +1,3 @@
-import importlib
-from core.backend_manager import BackendManager
 try:
     from pso.pso import run_optimization
 except ImportError:
@@ -15,15 +13,14 @@ import multiprocessing as mp
 from functools import partial
 from tqdm import tqdm  #type: ignore
 import os  # Add import for directory creation
-import numpy as np
 
 if __name__ == '__main__':  
-    n_particles_list = np.linspace(10, 50, 3)  # adjust the range as needed, here we use a linearly spaced array for demonstration purposes.
-    iters_list = np.linspace(100, 1000, 4)  # adjust the range as needed, here we use a linearly spaced array for demonstration purposes.
-    w_list = np.linspace(0.5, 0.9, 3)  # adjust the range as needed, here we use a linearly spaced array for demonstration purposes.
-    c1_list = np.linspace(1.0, 2.0, 3)
-    c2_list = np.linspace(0.5, 2.0, 3)
-    dim_list = np.linspace(2, 10, 3)
+    n_particles_list = [10, 20, 50]
+    iters_list = [100, 200, 500, 1000]
+    w_list = [0.5, 0.7, 0.9]
+    c1_list = [1.0, 1.5, 2.0]
+    c2_list = [0.5, 1.0, 1.5]
+    dim_list = [2, 5, 10]
     
     # Generate all combinations of parameters
     functions = ['ackley', 'rosenbrock', 'rastrigin']

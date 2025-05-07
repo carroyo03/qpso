@@ -1,133 +1,136 @@
+from typing import override
 import numpy as np
-from fun.functions import objective #type: ignore
-import time
-import pyswarms as ps #type: ignore
-from pyswarms.utils.functions import single_obj as fx #type: ignore
-from pso.particle import Particle  # type: ignore
+import asyncio
+from core.pso import PSO as BasePSO
+from implementations.async_prog.pso.particle import Particle
+from core.functions import objective
 
+class AsyncPSO(BasePSO):
 
-class ParticleSwarmOptimization:
-    def __init__(self, number_of_particles: int, dim: int,
-    bounds: tuple, vel_min: float, vel_max: float,
-    w: float, c1: float, c2: float, function: str):
-        """Particle Swarm Optimization (PSO) algorithm implementation.
-        Args:
-            number_of_particles (int): Number of particles in the swarm.
-            dim (int): Number of dimensions for the optimization problem.
-            bounds (tuple): Tuple containing the minimum and maximum bounds for the position.
-            vel_min (float): Minimum velocity for particles.
-            vel_max (float): Maximum velocity for particles.
-            w (float): Inertia weight.
-            c1 (float): Cognitive coefficient.
-            c2 (float): Social coefficient.
-            function (str): The objective function to optimize. Supported functions: "ackley", "rastrigin", "rosenbrock".
+    def __init__(self, number_of_particles: int, dim: int, bounds: tuple, vel_min: float, vel_max: float, w: float, c1: float, c2: float):
         """
-        pos_min, pos_max = bounds
-        pos_min = np.array(pos_min)
-        pos_max = np.array(pos_max)
-
-        if np.any(pos_min >= pos_max):
-            raise ValueError("The minimum position cannot be greater or equal than the maximum")
-
-        self.number_of_particles = number_of_particles
-        self.dim = dim
-        self.pos_min, self.pos_max = pos_min, pos_max
-        self.vel_min, self.vel_max = vel_min, vel_max
-        self.w_init = w  # Initial inertia weight
-        self.c1, self.c2 = c1, c2
-        self.function = function
-
-        # Initialize particles using the Particle class
-        self.particles = [
-            Particle(dim, pos_min, pos_max, vel_min, vel_max) 
-            for _ in range(number_of_particles)
-        ]
-        
-        # Evaluate all particles initially
-        for particle in self.particles:
-            particle.evaluate(
-                lambda x: objective(
-                    position = x.reshape(1, -1),
-                    function = self.function)[0],
-                
-                function_name=self.function
-            )
-        
-        # Find global best
-        gbest_idx = np.argmin([p.pbest_cost for p in self.particles])
-        self.gbest = self.particles[gbest_idx].pbest_position.copy()
-        self.gbest_cost = self.particles[gbest_idx].pbest_cost
-        
-        # Initialize cost history
-        self.cost_history:list[float] = []
-
-    def move_particles(self, w: float):
-        """Update the particles' positions and velocities.
-        Args:
-            w (float): Inertia weight.
-        """
-        for particle in self.particles:
-            # Update velocity and position
-            particle.update_velocity(w, self.c1, self.c2, self.gbest)
-            particle.update_position()
-            
-            # Evaluate new position
-            cost = particle.evaluate(
-                lambda x: objective(
-                    position=x.reshape(1, -1), 
-                    function=self.function
-                    )[0],
-                function_name=self.function
-            )
-            
-            # Update global best if needed
-            if cost < self.gbest_cost:
-                self.gbest = particle.position.copy()
-                self.gbest_cost = cost
-
-    def optimize(self, num_iterations: int) -> tuple:
-        """Optimize the objective function using PSO.
-        Args:
-            num_iterations (int): Number of iterations for the optimization.
+        Initialize the Asynchronous Particle Swarm Optimization (AsyncPSO) algorithm.
+    
+        Parameters:
+        - number_of_particles (int): The number of particles in the swarm.
+        - dim (int): The number of dimensions for the optimization problem.
+        - bounds (tuple): A tuple containing the minimum and maximum bounds for the position.
+        - vel_min (float): The minimum velocity for particle movement.
+        - vel_max (float): The maximum velocity for particle movement.
+        - w (float): The inertia weight for the velocity update.
+        - c1 (float): The cognitive coefficient for the velocity update.
+        - c2 (float): The social coefficient for the velocity update.
+    
         Returns:
-            tuple: Best cost, best position, and cost history.
+        - None
         """
-        # Initialize the inertia weight schedule
-        # Linearly decrease the inertia weight from w_init to w_min
-        w_min = 0.4
-        w_values = np.linspace(self.w_init, w_min, num_iterations)
+        super().__init__(number_of_particles, dim, bounds, vel_min, vel_max, w, c1, c2)
+    
+        self.particles = [Particle(dim,self.pos_min, self.pos_max,vel_min, vel_max) for _ in range(number_of_particles)]
+    
+    async def initialize_async(self, objective_function):
+        """
+        Initialize particles asynchronously using the provided objective function.
         
-        # Initialize cost history
+        Args:
+            objective_function: The objective function to be evaluated.
+        """
+
+        tasks = [particle.evaluate_async(objective_function) for particle in self.particles]
+        costs = await asyncio.gather(*tasks)
+
+        best_idx = np.argmin(costs)
+        self.gbest = self.particles[best_idx].position.copy()
+        self.gbest_cost = costs[best_idx]
+    
+    async def move_particles_async(self, w: float, objective_function):
+        """
+        Update the position of each particle in the swarm asynchronously using the objective function.
+        
+        Parameters:
+        - w (float): The inertia weight for the velocity update.
+        - objective_function: The objective function to be evaluated.
+        
+        This method iterates over each particle in the swarm, updates its velocity and position,
+        evaluates the objective function asynchronously, and updates the global best position and cost
+        if a better solution is found.
+        """
+
+        for particle in self.particles:
+            particle.update_velocity(w, self.c1,self.c2,self.gbest)
+            particle.update_position()
+        
+        tasks = [particle.evaluate_async(objective_function) for particle in self.particles]
+        costs = await asyncio.gather(*tasks)
+
+        for i, cost in enumerate(costs):
+            if cost < self.gbest_cost:
+                self.gbest = self.particles[i].position.copy()
+                self.gbest_cost = cost
+    
+    async def optimize_async(self, objective_function, max_iterations: int):
+
+        """
+        Asynchronously optimizes the swarm using the provided objective function for a specified number of iterations.
+        
+        Parameters:
+        - objective_function: The objective function to be evaluated.
+        - max_iterations (int): The maximum number of iterations for the optimization.
+        
+        Returns:
+        - tuple: A tuple containing the best cost, best position, and cost history.
+        """
+        
+        # Inicializa el enjambre de forma asíncrona
+        await self.initialize_async(objective_function)
+        
+        # Inicializa el programa de peso de inercia
+        # Disminuye linealmente el peso de inercia desde w_init hasta w_min
+        w_min = 0.4
+        w_values = np.linspace(self.w_init, w_min, max_iterations)
+        
+        # Inicializa el historial de costos
         self.cost_history = []
         
-        for it in range(num_iterations):
-            # Update the inertia weight and move particles
-            self.move_particles(w_values[it])
+        for it in range(max_iterations):
+            # Actualiza el peso de inercia y mueve las partículas de forma asíncrona
+            await self.move_particles_async(w_values[it], objective_function)
             self.cost_history.append(self.gbest_cost)
         
-        # Final evaluation
+        # Evaluación final
         return self.gbest_cost, self.gbest, self.cost_history
 
-def my_pso(function: str, bounds:tuple, n_particles: int, iters: int, w: float, c1: float, c2: float, dim:int=2, vel_min: float=-0.1, vel_max: float=0.1) -> tuple:
-    """My PSO implementation.
+
+def my_async_pso(function: str, bounds:tuple, n_particles: int, iters: int, w: float, c1: float, c2: float, dim:int=2, vel_min: float=-0.1, vel_max: float=0.1) -> tuple:
+    """
+    My Async Particle Swarm Optimization (AsyncPSO) implementation.
+    This function uses the asyncio module to run the optimization in an asynchronous manner.
+    The objective function is converted to an asynchronous function and then used in the optimization process.
+
     Args:
         function (str): The objective function to optimize. Supported functions: "ackley", "rastrigin", "rosenbrock".
         bounds (tuple): Tuple containing the minimum and maximum bounds for the position.
         n_particles (int): Number of particles in the swarm.
         iters (int): Number of iterations for the optimization.
-        w (float): Inertia weight.
-        c1 (float): Cognitive coefficient.
-        c2 (float): Social coefficient.
+        w (float): The inertia weight for the velocity update.
+        c1 (float): The cognitive coefficient for the velocity update.
+        c2 (float): The social coefficient for the velocity update.
         dim (int): Number of dimensions for the optimization problem.
+        vel_min (float): The minimum velocity for particle movement.
+        vel_max (float): The maximum velocity for particle movement.
+
     Returns:
-        tuple: Best cost, best position, and cost history.
+        Tuple: A tuple containing the best cost, best position, and cost history.
     """
-    optimizer = ParticleSwarmOptimization(
-        number_of_particles=n_particles, dim=dim, bounds=bounds,
-        vel_min=vel_min, vel_max=vel_max, w=w, c1=c1, c2=c2, function=function
-    )
-    # Initialize the cost, position and cost history obtained from the optimizer
-    cost, pos, cost_history = optimizer.optimize(num_iterations=iters)
+    
+    def async_objective(position):
+        return objective(position.reshape(1, -1), function=function)[0]
+    
+    optimizer = AsyncPSO(n_particles, dim, bounds, vel_min, vel_max, w, c1, c2)
+    
+    # Ejecutar la optimización asíncrona
+    cost, pos, cost_history = asyncio.run(optimizer.optimize_async(async_objective, iters))
+    
     return cost, pos, cost_history
 
 def pyswarms_pso(function: str, bounds, n_particles, iters, options: dict) -> tuple:
@@ -208,13 +211,13 @@ def run_optimization(params_and_function: tuple, rep_num=0):
     else:
         bounds = ([-5] * dim, [5] * dim)
     
-    # My PSO (without internal progress bar)
+    # My Async PSO (without internal progress bar)
     time_start1 = time.time()
-    my_result = my_pso(
+    my_result = my_async_pso(
         function=function, bounds=bounds, n_particles=n_particles, 
         iters=iters, dim=dim, w=w, c1=c1, c2=c2
     )
-    my_pso_time = time.time() - time_start1
+    my_async_pso_time = time.time() - time_start1
     
     # PySwarms
     time_start2 = time.time()
@@ -233,7 +236,7 @@ def run_optimization(params_and_function: tuple, rep_num=0):
     ""
     # Create result dictionaries without printing anything
     my_result_dict = {
-        'method': 'my_pso',
+        'method': 'my_async_pso',
         'function': function,
         'n_particles': n_particles,
         'iters': iters,
@@ -243,7 +246,7 @@ def run_optimization(params_and_function: tuple, rep_num=0):
         'dim': dim,
         'cost': my_result[0],
         'position': my_result[1].tolist(),
-        'execution_time': my_pso_time,
+        'execution_time': my_async_pso_time,
         'cost_history': my_result[2],
         'repetition': rep_num
     }
