@@ -109,15 +109,16 @@ class PSO:
         particle swarm optimization algorithm. This function takes the current position of a particle as
         input and returns the cost or fitness value associated with that position.
         """
-        
+
+
+
         for particle in self.particles:
-            # Actualiza velocidad y posición
-            particle.update_velocity(w, self.c1, self.c2, self.gbest)
-            particle.update_position()
-            
-            # Evalúa la nueva posición
+            # update velocity and position
+            particle.update_velocity_and_position(w, self.c1, self.c2, self.gbest)
+
+            # Evaluate the new position and update personal best
             cost = particle.evaluate(objective_function)
-            
+
             # Actualiza el mejor global si es necesario
             if cost < self.gbest_cost:
                 self.gbest = particle.position.copy()

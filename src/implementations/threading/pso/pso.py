@@ -1,228 +1,179 @@
-from typing import override
+from typing import Optional
+
 import numpy as np
 import concurrent.futures
 from core.pso import PSO as BasePSO
+from core.functions import objective
 from implementations.threading.pso.particle import Particle
+import os
 
 class ThreadingPSO(BasePSO):
 
-    def __init__(self, number_of_particles: int, dim: int, bounds: tuple, vel_min: float, vel_max: float, w: float, c1: float, c2: float, max_workers:int=None):
+    def __init__(self, number_of_particles: int, dim:int, bounds:tuple, vel_min:float, vel_max:float, w:float, c1:float, c2:float, max_workers:Optional[int]=None):
         """
-        Initialize a new instance of ThreadingPSO.
+        Initializes the ThreadingPSO instance.
+
+        This constructor sets up the attributes and parameters needed to initialize
+        a collection of particles for PSO Algorithm implemented with threading. The particles are
+        created within the given dimensionality and bounded space while adhering
+        to the specified velocity constraints. A thread pool executor is also
+        initialized for efficient task distribution across available workers.
 
         Parameters:
-        - number_of_particles (int): The number of particles in the swarm.
-        - dim (int): The dimensionality of the problem.
-        - bounds (tuple): A tuple containing the lower and upper bounds for each dimension.
-        - vel_min (float): The minimum velocity for particles.
-        - vel_max (float): The maximum velocity for particles.
-        - w (float): The inertia weight for the PSO algorithm.
-        - c1 (float): The cognitive component for the PSO algorithm.
-        - c2 (float): The social component for the PSO algorithm.
-        - max_workers (int, optional): The maximum number of threads to use for parallel processing. Defaults to the number of CPU cores.
+            number_of_particles: int
+                The number of particles in the swarm.
+            dim: int
+                The number of dimensions for each particle in the search space.
+            bounds: tuple
+                A tuple defining the lower and upper bounds for particle positions in
+                the search space.
+            vel_min: float
+                The minimum permissible velocity for the particles.
+            vel_max: float
+                The maximum permissible velocity for the particles.
+            w: float
+                The inertia weight applied to particle velocities during updates.
+            c1: float
+                The cognitive coefficient influencing self-learning of particles.
+            c2: float
+                The social coefficient affecting the attraction to the global best.
+            max_workers: Optional[int]
+                An optional parameter specifying the maximum number of threads for
+                parallel execution. Defaults to the number of available CPU cores
+                minus one if not provided.
 
-        Returns:
-        - None
+        Attributes:
+            particles: list
+                A list of Particle objects representing the particles in the swarm.
+            max_workers: int
+                The actual number of threads in use by the multithreaded executor.
+            executor: concurrent.futures.ThreadPoolExecutor
+                The thread pool executor used for distributing tasks among multiple threads.
         """
         super().__init__(number_of_particles, dim, bounds, vel_min, vel_max, w, c1, c2)
+        self.pos_min, self.pos_max = bounds
 
         self.particles = [Particle(dim, self.pos_min, self.pos_max, vel_min, vel_max) for _ in range(number_of_particles)]
 
-        self.max_workers = max_workers if max_workers else concurrent.futures.cpu_count()
+        self.max_workers = max_workers if max_workers else os.cpu_count() -1
+
 
     def initialize(self, objective_function):
+        """
+        Initializes the global best position and its corresponding cost by evaluating all particles
+        against the provided objective function.
 
+        This method evaluates the given objective function for each particle in the swarm
+        using a parallel execution context. It identifies the particle with the best (minimum)
+        objective function cost and sets the global best position and corresponding cost accordingly.
+
+        Parameters:
+        objective_function : Callable
+            The objective function to be evaluated for each particle.
+        """
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            futures = [executor.submit(particle.evaluate,objective_function) for particle in self.particles]
-            costs = [future.result() for future in concurrent.futures.as_completed(futures)]
-        
-        for i, particle in enumerate(self.particles):
-            if particle.pbest_cost < self.gbest_cost:
-                self.gbest = particle.position.copy()
-                self.gbest_cost = particle.pbest_cost
+            costs = list(executor.map(lambda p: p.evaluate(objective_function), self.particles))
+        best_idx = np.argmin(costs)
+        self.gbest = self.particles[best_idx].pbest_position.copy()
+        self.gbest_cost = costs[best_idx]
     
     def move_particles(self, w: float, objective_function):
-        
-        for particle in self.particles:
-            particle.update_velocity(w, self.c1, self.c2, self.gbest)
-            particle.update_position()
+        """
+        Moves particles in the swarm by updating their velocities and positions and evaluates their costs
+        using the provided objective function. Updates the global best position and cost if a better solution
+        is found among the particles.
+
+        Parameters:
+            w (float): Inertia weight controlling the impact of the previous velocity on the current velocity.
+            objective_function: A callable function that computes the cost for a given particle position.
+        """
+        _ = [particle.update_velocity_and_position(w, self.c1, self.c2, self.gbest) for particle in self.particles]
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            futures = [executor.submit(particle.evaluate, objective_function) for particle in self.particles]
-            _ = [future.result() for future in concurrent.futures.as_completed(futures)]
-        
-        for particle in self.particles:
-            if particle.pbest_cost < self.gbest_cost:
-                self.gbest = particle.position.copy()
-                self.gbest_cost = particle.pbest_cost
+            costs = list(executor.map(lambda p: p.evaluate(objective_function), self.particles))
+        best_idx = np.argmin(costs)
+        if costs[best_idx] < self.gbest_cost:
+            self.gbest = self.particles[best_idx].pbest_position.copy()
+            self.gbest_cost = costs[best_idx]
+
+    def optimize(self, objective_function, num_iterations):
+        """
+        Optimize the given objective function using a particle swarm optimization technique.
+        This function iteratively adjusts the particles' movements based on the inertia weight
+        to find the minimum cost value.
+
+        Parameters:
+            objective_function: Callable
+                The objective function to minimize.
+            num_iterations: int
+                The number of iterations to perform the optimization.
+
+        Returns:
+            tuple:
+                - gbest_cost: float
+                    The best cost achieved by the swarm.
+                - gbest: ndarray
+                    The optimized parameters at the best cost.
+                - cost_history: list
+                    History of the cost during the optimization iterations.
+        """
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            self.executor = executor
+            # Initialize the particles and find the global best position
+            self.initialize(objective_function)
+            w_min = .4
+            w_values = np.linspace(self.w_init,w_min,num_iterations)
+            cost_history = [self.gbest_cost]
+            for w in w_values:
+                self.move_particles(w, objective_function)
+                cost_history.append(self.gbest_cost)
+
+        return self.gbest_cost, self.gbest, cost_history
 
 
-
-def my_threading_pso(function: str, bounds:tuple, n_particles: int, iters: int, w: float, c1: float, c2: float, dim:int=2, vel_min: float=-0.1, vel_max: float=0.1, max_workers:int = None) -> tuple:
-    """My Threading PSO implementation.
-    Args:
-        function (str): The objective function to optimize. Supported functions: "ackley", "rastrigin", "rosenbrock".
-        bounds (tuple): Tuple containing the minimum and maximum bounds for the position.
-        n_particles (int): Number of particles in the swarm.
-        iters (int): Number of iterations for the optimization.
-        w (float): Inertia weight.
-        c1 (float): Cognitive coefficient.
-        c2 (float): Social coefficient.
-        dim (int): Number of dimensions for the optimization problem.
-        vel_min (float): The minimum velocity for particle movement.
-        vel_max (float): The maximum velocity for particle movement.
-        max_workers (int): The maximum number of threads to use for parallel processing. Defaults to the number of CPU cores.
-    Returns:
-        tuple: Best cost, best position, and cost history.
+def my_threading_pso(function: str, bounds: tuple, n_particles: int, num_iterations: int, w: float, c1: float,
+                     c2: float, dim: int = 2, vel_min: float = -0.1, vel_max: float = 0.1,
+                     max_workers: int = None) -> tuple:
     """
-    # Validar la función objetivo
-    if function not in ["ackley", "rastrigin", "rosenbrock"]:
-        return None, None, None
-       
-    # Inicializar el optimizador
-    optimizer = ThreadingPSO(n_particles, dim, bounds, vel_min, vel_max, w, c1, c2, max_workers)
-    
-    
-    # Ejecutar la optimización asíncrona
-    cost, pos, cost_history = optimizer.optimize(iters)
-    
-    return cost, pos, cost_history
-    
+    Performs Particle Swarm Optimization (PSO) using multithreaded processing.
 
-def pyswarms_pso(function: str, bounds, n_particles, iters, options: dict) -> tuple:
-    """PySwarms PSO implementation.
-    Args:
-        function (str): The objective function to optimize. Supported functions: "ackley", "rastrigin", "rosenbrock".
-        bounds (tuple): Tuple containing the minimum and maximum bounds for the position.
-        n_particles (int): Number of particles in the swarm.
-        iters (int): Number of iterations for the optimization.
-        options (dict): Options for PySwarms PSO.
+    This function allows optimizing a given mathematical function using the PSO algorithm.
+    It distributes the optimization tasks across multiple threads to enhance performance
+    and achieves the optimal solution based on the given bounds, particle count, and
+    other hyperparameters defining the swarm's behavior.
+
+    Parameters:
+        function: str
+            The name of the function to be optimized.
+        bounds: tuple
+            A tuple of tuples, where each inner tuple defines the lower and upper
+            bounds for the dimensions of the solution space.
+        n_particles: int
+            The number of particles in the swarm.
+        num_iterations: int
+            The number of iterations for the algorithm to execute.
+        w: float
+            The inertia weight for velocity calculation.
+        c1: float
+            The cognitive weight indicating personal learning influence.
+        c2: float
+            The social weight indicating global learning influence.
+        dim: int, optional
+            The number of dimensions in the solution space. Defaults to 2.
+        vel_min: float, optional
+            The minimum velocity that a particle can have. Defaults to -0.1.
+        vel_max: float, optional
+            The maximum velocity that a particle can have. Defaults to 0.1.
+        max_workers: int, optional
+            The maximum number of threads to use for processing. Defaults to None,
+            which uses the available system threads.
+
     Returns:
-        tuple: Best cost, best position, and cost history.
+        tuple
+            A tuple containing the best solution found and the corresponding value
+            of the objective function.
     """
-    # Only supporting 3 functions: ackley, rastrigin and rosenbrock
-    if function == "ackley":
-        func = fx.ackley
-    elif function == "rastrigin":
-        func = fx.rastrigin
-    elif function == "rosenbrock":
-        func = fx.rosenbrock
-    else:
-        return None, None, None
-
-    optimizer = ps.single.GlobalBestPSO(
-        n_particles=n_particles,
-        dimensions=len(bounds[0]),
-        options=options,
-        bounds=bounds,
-        velocity_clamp=(-0.1, 0.1)
-    )
-    cost, pos = optimizer.optimize(func, iters=iters)
-    cost_history = optimizer.cost_history
-    return cost, pos, cost_history
-
-
-def run_optimization(params_and_function: tuple, rep_num=0):
-    """Run the optimization for a given set of parameters and function.
-    Args:
-        params_and_function (tuple): Tuple containing parameters and function name.
-        rep_num (int): Repetition number for the optimization.
-    Returns:
-        list: List containing the results of the optimization.
-    """
-    # Disable PySwarms logging completely
-    import logging
-    logging.getLogger("pyswarms").setLevel(logging.CRITICAL)
-    
-    # Also disable PySwarms standard output during optimization
-    import sys
-    import os
-    from contextlib import contextmanager
-    
-    @contextmanager
-    def suppress_stdout_stderr():
-        # Redirect stdout and stderr to /dev/null
-        devnull = os.open(os.devnull, os.O_WRONLY)
-        old_stdout = os.dup(1)
-        old_stderr = os.dup(2)
-        os.dup2(devnull, 1)
-        os.dup2(devnull, 2)
-        os.close(devnull)
-        
-        try:
-            yield
-        finally:
-            # Restore stdout and stderr
-            os.dup2(old_stdout, 1)
-            os.dup2(old_stderr, 2)
-            os.close(old_stdout)
-            os.close(old_stderr)
-    
-    # Unpack parameters and function
-    n_particles, iters, w, c1, c2, dim, function = params_and_function
-    
-    # Set bounds based on the function
-    if function == "rastrigin":
-        bounds = ([-5.12] * dim, [5.12] * dim)
-    else:
-        bounds = ([-5] * dim, [5] * dim)
-    
-    # My Async PSO (without internal progress bar)
-    time_start1 = time.time()
-    my_result = my_threading_pso(
-        function=function, bounds=bounds, n_particles=n_particles, 
-        iters=iters, dim=dim, w=w, c1=c1, c2=c2
-    )
-    my_threading_pso_time = time.time() - time_start1
-    
-    # PySwarms
-    time_start2 = time.time()
-    with suppress_stdout_stderr():
-        pyswarms_result = pyswarms_pso(
-            function, bounds=bounds, n_particles=n_particles, 
-            iters=iters, options={'w': w, 'c1': c1, 'c2': c2}
-        )
-    pyswarms_pso_time = time.time() - time_start2
-    
-    if pyswarms_result[0] is None:
-        params = {'Number of particles' : n_particles, 'Iterations' : iters, 'w': w, 'c1': c1, 'c2': c2, 'Dimensions': dim, 'Function': function}
-        # Error handling for PySwarms
-        print(f"Error: PySwarms optimization failed for function {function} with params {params}")
-        return None
-    ""
-    # Create result dictionaries without printing anything
-    my_result_dict = {
-        'method': 'my_threading_pso',
-        'function': function,
-        'n_particles': n_particles,
-        'iters': iters,
-        'w': w,
-        'c1': c1,
-        'c2': c2,
-        'dim': dim,
-        'cost': my_result[0],
-        'position': my_result[1].tolist(),
-        'execution_time': my_threading_pso_time,
-        'cost_history': my_result[2],
-        'repetition': rep_num
-    }
-    
-    pyswarms_result_dict = {
-        'method': 'pyswarms_pso',
-        'function': function,
-        'n_particles': n_particles,
-        'iters': iters,
-        'w': w,
-        'c1': c1,
-        'c2': c2,
-        'dim': dim,
-        'cost': pyswarms_result[0],
-        'position': pyswarms_result[1].tolist(),
-        'execution_time': pyswarms_pso_time,
-        'cost_history': pyswarms_result[2],
-        'repetition': rep_num
-    }
-    
-    # Remove all print statements
-    
-    return [my_result_dict, pyswarms_result_dict]
+    def obj_function(position):
+        return objective(function=function, position=position)[0]
+    optimizer = ThreadingPSO(n_particles, dim, bounds, vel_min, vel_max, w, c1, c2)
+    return optimizer.optimize(obj_function, num_iterations)

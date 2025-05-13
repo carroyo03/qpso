@@ -1,4 +1,6 @@
-import numpy as np 
+import numpy as np
+
+
 
 def ackley(position:np.ndarray):
     """ Ackley function.
@@ -9,13 +11,22 @@ def ackley(position:np.ndarray):
     Returns:
         float: The Ackley function value at the given position.
     """
-    dim = position.shape[1]
-    a, b, c = 20, 0.2, 2 * np.pi
-    sum1 = np.sum(position ** 2, axis=1)
-    sum2 = np.sum(np.cos(c * position), axis=1)
-    term1 = -a * np.exp(-b * np.sqrt(sum1 / dim))
-    term2 = -np.exp(sum2 / dim)
-    return term1 + term2 + a + np.exp(1)
+    x = position
+    a, b, c = 20.0, 0.2, 2.0 * np.pi
+    n = x.shape[1]
+    sum1 = np.zeros(x.shape[0])
+    sum2 = np.zeros(x.shape[0])
+
+    for i in range(x.shape[0]):
+        for j in range(n):
+            sum1[i] += x[i, j] ** 2
+            sum2[i] += np.cos(c * x[i, j])
+
+    term1 = -a * np.exp(-b * np.sqrt(sum1 / n))
+    term2 = -np.exp(sum2 / n)
+
+    return term1 + term2 + a + np.exp(1.0)
+
 
 def rastrigin(position:np.ndarray):
     """ Rastrigin function.
@@ -26,9 +37,16 @@ def rastrigin(position:np.ndarray):
     Returns:
         float: The Rastrigin function value at the given position.
     """
-    position = np.clip(position, -5.12, 5.12)
-    dim = position.shape[1]
-    return 10 * dim + np.sum(position ** 2 - 10 * np.cos(2 * np.pi * position), axis=1)
+    x = position
+    n = x.shape[1]
+    result = 10.0 * n * np.ones(x.shape[0])
+
+    for i in range(x.shape[0]):
+        for j in range(n):
+            result[i] += x[i, j] ** 2 - 10.0 * np.cos(2.0 * np.pi * x[i, j])
+
+    return result
+
 
 def rosenbrock(position:np.ndarray):
     """ Rosenbrock function.
@@ -39,14 +57,17 @@ def rosenbrock(position:np.ndarray):
     Returns:
         float: The Rosenbrock function value at the given position.
     """
-    dim = position.shape[1]
-    result = np.zeros(position.shape[0])
-    for i in range(dim - 1):
-        x = position[:, i]
-        y = position[:, i + 1]
-        result += 100 * (y - x ** 2) ** 2 + (1 - x) ** 2
+    x = position
+    n = x.shape[1]
+    result = np.zeros(x.shape[0])
+
+    for i in range(x.shape[0]):
+        for j in range(n - 1):
+            result[i] += 100.0 * (x[i, j + 1] - x[i, j] ** 2) ** 2 + (x[i, j] - 1.0) ** 2
+
     return result
-    
+
+
 def objective(position:np.ndarray, function:str):
     """Objective function.
 

@@ -1,7 +1,66 @@
 import numpy as np
+from numba import njit
 
-# The Particle class implements a particle for Particle Swarm Optimization (PSO) with methods for
-# updating velocity, position, and evaluating the particle's position.
+@njit(parallel=True)
+def compute_velocity(velocity, position, pbest_position, gbest_position, w, c1, c2, vel_min, vel_max):
+    """
+    Compute the updated velocity for a particle based on its current
+    velocity, position, personal best position, and global best position,
+    along with given parameters for inertia weight, cognitive
+    coefficient, social coefficient, and velocity bounds.
+
+    Args:
+        velocity (numpy.ndarray): The current velocity of the particle.
+        position (numpy.ndarray): The current position of the particle.
+        pbest_position (numpy.ndarray): The personal best position of
+            the particle.
+        gbest_position (numpy.ndarray): The global best position in the
+            swarm.
+        w (float): The inertia weight controlling the impact of the
+            current velocity.
+        c1 (float): The cognitive coefficient controlling the
+            attraction toward the personal best.
+        c2 (float): The social coefficient controlling the attraction
+            toward the global best.
+        vel_min (float): The lower boundary for velocity values.
+        vel_max (float): The upper boundary for velocity values.
+
+    Returns:
+        numpy.ndarray: The updated velocity of the particle.
+
+    Raises:
+        None
+    """
+    r1 = np.random.random(size=velocity.shape)
+    r2 = np.random.random(size=velocity.shape)
+    cognitive = c1 * r1 * (pbest_position - position)
+    social = c2 * r2 * (gbest_position - position)
+    new_velocity = w * velocity + cognitive + social
+    return np.clip(new_velocity, vel_min, vel_max)
+
+@njit(parallel=True)
+def compute_position(position, velocity, pos_min, pos_max):
+    """
+    Computes the updated position by adding the velocity to the current position and ensures the result is
+    clamped within the provided minimum and maximum positional bounds using NumPy's clip function.
+
+    Parameters:
+    position : array-like or float
+        The current position value(s).
+    velocity : array-like or float
+        The velocity value(s) to be added to the current position.
+    pos_min : array-like or float
+        The minimum positional bound(s).
+    pos_max : array-like or float
+        The maximum positional bound(s).
+
+    Returns:
+    array-like or float
+        The updated position value(s), clamped between `pos_min` and `pos_max`.
+    """
+    new_position = position + velocity
+    return np.clip(new_position, pos_min.astype(np.float64), pos_max.astype(np.float64))
+
 class Particle:
 
     def __init__(self, dim: int, pos_min: np.ndarray, pos_max: np.ndarray,
@@ -51,60 +110,41 @@ class Particle:
         self.pos_max = pos_max
         self.vel_min = vel_min
         self.vel_max = vel_max
-    
-    def update_velocity(self, w: float, c1: float, c2: float, gbest_position: np.ndarray):
-        """
-        The function `update_velocity` calculates the new velocity of a particle in a particle swarm
-        optimization algorithm based on inertia, cognitive, and social components.
-        
-        Args:
-          w (float): The parameter `w` in the `update_velocity` function represents the inertia weight
-        in a particle swarm optimization algorithm. It controls the impact of the previous velocity on
-        the current velocity update. A higher inertia weight allows the particle to maintain its current
-        direction, while a lower inertia weight enables the particle to explore
-          c1 (float): In the provided code snippet, the parameter `c1` represents the cognitive
-        parameter used in the Particle Swarm Optimization (PSO) algorithm. This parameter controls the
-        particle's attraction towards its personal best position. It is multiplied by a random value
-        `r1` and the difference between the particle's personal
-          c2 (float): The parameter `c2` in the `update_velocity` function represents the cognitive
-        component, which determines the attraction towards the global best position in the particle
-        swarm optimization algorithm. It is a constant that scales the influence of the global best
-        position on updating the velocity of a particle.
-          gbest_position (np.ndarray): The `gbest_position` parameter in the `update_velocity` function
-        represents the best global position found by any particle in the swarm. It is used to calculate
-        the social component of the velocity update, which attracts the particle towards this global
-        best position. This helps the particle explore the search space efficiently by
-        """
-       
 
-        # Componentes aleatorios para comportamiento estocástico
-        r1 = np.random.random()
-        r2 = np.random.random()
-        
-        # Componente cognitivo (atracción hacia el mejor personal)
-        cognitive = c1 * r1 * (self.pbest_position - self.position)
-        
-        # Componente social (atracción hacia el mejor global)
-        social = c2 * r2 * (gbest_position - self.position)
-        
-        # Actualiza la velocidad con componentes de inercia, cognitivo y social
-        self.velocity = w * self.velocity + cognitive + social
-        
-        # Recorta la velocidad a los límites
-        self.velocity = np.clip(self.velocity, self.vel_min, self.vel_max)
-    
-    def update_position(self):
+    def update_velocity_and_position(self, w: float, c1: float, c2: float, gbest_position: np.ndarray):
         """
-        The `update_position` function updates the position of an object and ensures it stays within
-        specified limits.
-        """
+        Updates the velocity and position of the particle based on the provided
+        coefficients and the global best position.
 
-        # Actualiza la posición
-        self.position += self.velocity
-        
-        # Recorta la posición a los límites
-        self.position = np.clip(self.position, self.pos_min, self.pos_max)
-    
+        The method incorporates the effects of inertia, cognitive behavior, and
+        social behavior to calculate the new velocity, then updates the position
+        accordingly within defined limits.
+
+        Parameters:
+        w: float
+            The inertia weight factor, controlling the influence of the previous
+            velocity.
+        c1: float
+            The cognitive coefficient, determining how much the particle is
+            influenced by its best-known position.
+        c2: float
+            The social coefficient, dictating the particle's influence by the
+            swarm's best-known position.
+        gbest_position: np.ndarray
+            The global best-known position in the swarm, used for the social
+            behavior component.
+
+
+        """
+        self.velocity = compute_velocity(
+            self.velocity, self.position, self.pbest_position, gbest_position,
+            w, c1, c2,self.vel_min, self.vel_max
+        )
+        self.position = compute_position(
+            self.position, self.velocity, self.pos_min, self.pos_max
+        )
+
+
     def evaluate(self, objective_function):
         """
         This function evaluates the current position, updates the personal best if the current position
@@ -132,7 +172,7 @@ class Particle:
             
         return cost
     
-    def __del__():
+    def __del__(self):
       """
       The `__del__` method is a special method that is automatically called when an object is deleted
       from memory. In this case, it is used to release any resources or memory allocated to the

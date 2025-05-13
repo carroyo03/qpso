@@ -1,4 +1,4 @@
-import numpy as np
+
 from core.particle import Particle as BaseParticle
 
 class Particle(BaseParticle):
