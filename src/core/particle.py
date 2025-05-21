@@ -171,11 +171,3 @@ class Particle:
             self.pbest_cost = cost
             
         return cost
-    
-    def __del__(self):
-      """
-      The `__del__` method is a special method that is automatically called when an object is deleted
-      from memory. In this case, it is used to release any resources or memory allocated to the
-      particle object.
-      """
-      pass
