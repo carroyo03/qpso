@@ -4,7 +4,7 @@ import numpy as np
 import concurrent.futures
 from core.pso import PSO as BasePSO
 from core.functions import objective
-from implementations.threading.pso.particle import Particle
+from core.particle import Particle
 import os
 
 class ThreadingPSO(BasePSO):

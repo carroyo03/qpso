@@ -58,13 +58,15 @@ def rosenbrock(position:np.ndarray):
         float: The Rosenbrock function value at the given position.
     """
     x = position
-    n = x.shape[1]
-    result = np.zeros(x.shape[0])
+    n = x.shape[1] # dimension
+    result = np.zeros(x.shape[0]) # num_particles
 
-    for i in range(x.shape[0]):
-        for j in range(n - 1):
-            result[i] += 100.0 * (x[i, j + 1] - x[i, j] ** 2) ** 2 + (x[i, j] - 1.0) ** 2
-
+    for i in range(x.shape[0]): # loop over particles
+        if n == 1: # Handle 1D Rosenbrock: (x_1 - 1)^2
+            result[i] = (x[i, 0] - 1.0) ** 2
+        else: # Standard Rosenbrock for n > 1
+            for j in range(n - 1):  # loop dimensions up to n-1
+                result[i] += 100.0 * (x[i, j + 1] - x[i, j] ** 2) ** 2 + (x[i, j] - 1.0) ** 2
     return result
 
 

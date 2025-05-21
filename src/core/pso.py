@@ -1,5 +1,5 @@
 import numpy as np
-from core.particle import Particle
+from .particle import Particle
 
 
 # The `PSO` class implements a particle swarm optimization algorithm with specified parameters,
@@ -51,26 +51,26 @@ class PSO:
         pos_max = np.array(pos_max)
 
         if np.any(pos_min >= pos_max):
-            raise ValueError("La posición mínima no puede ser mayor o igual que la máxima")
+            raise ValueError("The minimum position cannot be greater than or equal to the maximum position")
 
         self.number_of_particles = number_of_particles
         self.dim = dim
         self.pos_min, self.pos_max = pos_min, pos_max
         self.vel_min, self.vel_max = vel_min, vel_max
-        self.w_init = w  # Peso de inercia inicial
+        self.w_init = w  # Initial inertia weight
         self.c1, self.c2 = c1, c2
         
-        # Inicializa las partículas usando la clase Particle
+        # Initialize particles using the Particle class
         self.particles = [
             Particle(dim, pos_min, pos_max, vel_min, vel_max) 
             for _ in range(number_of_particles)
         ]
         
-        # Inicializa el mejor global
+        # Initialize global best
         self.gbest = None
         self.gbest_cost = float('inf')
         
-        # Inicializa el historial de costos
+        # Initialize cost history
         self.cost_history = []
     
     def initialize(self, objective_function):
@@ -85,11 +85,11 @@ class PSO:
         value associated with that position in the optimization problem.
         """
       
-        # Evalúa todas las partículas inicialmente
+        # Evaluate all particles initially
         for particle in self.particles:
             cost = particle.evaluate(objective_function)
             
-            # Actualiza el mejor global si es necesario
+            # Update global best if necessary
             if cost < self.gbest_cost:
                 self.gbest = particle.position.copy()
                 self.gbest_cost = cost
@@ -119,7 +119,7 @@ class PSO:
             # Evaluate the new position and update personal best
             cost = particle.evaluate(objective_function)
 
-            # Actualiza el mejor global si es necesario
+            # Update global best if necessary
             if cost < self.gbest_cost:
                 self.gbest = particle.position.copy()
                 self.gbest_cost = cost
@@ -148,21 +148,21 @@ class PSO:
         3. The history of costs during the optimization process (`self.cost_history`)
         """
         
-        # Inicializa el enjambre
+        # Initialize the swarm
         self.initialize(objective_function)
         
-        # Inicializa el programa de peso de inercia
-        # Disminuye linealmente el peso de inercia desde w_init hasta w_min
+        # Initialize inertia weight schedule
+        # Linearly decrease inertia weight from w_init to w_min
         w_min = 0.4
         w_values = np.linspace(self.w_init, w_min, num_iterations)
         
-        # Inicializa el historial de costos
+        # Initialize cost history
         self.cost_history = []
         
         for it in range(num_iterations):
-            # Actualiza el peso de inercia y mueve las partículas
+            # Update inertia weight and move particles
             self.move_particles(w_values[it], objective_function)
             self.cost_history.append(self.gbest_cost)
         
-        # Evaluación final
+        # Final evaluation
         return self.gbest_cost, self.gbest, self.cost_history
